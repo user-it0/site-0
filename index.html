@@ -46,9 +46,9 @@
     <header>
       <input type="text" id="display-username" value="" readonly>
     </header>
-    <section class="search-section">
+    <section id="search-section">
       <input type="text" id="user-search" placeholder="ユーザー検索">
-      <button id="create-group-btn">グループ作成</button>
+      <button id="open-group-modal">グループ作成</button>
       <ul id="search-result"></ul>
     </section>
     <section>
@@ -60,26 +60,12 @@
       <ul class="contact-list" id="contact-list"></ul>
     </section>
     <section>
-      <h2>グループチャット</h2>
+      <h2>グループ一覧</h2>
       <ul class="contact-list" id="group-list"></ul>
     </section>
   </div>
 
-  <!-- Group Creation Modal -->
-  <div id="group-modal" class="modal" style="display:none;">
-    <div class="modal-content">
-      <h2>グループ作成</h2>
-      <label>グループ名:
-        <input type="text" id="group-name" required>
-      </label>
-      <h3>メンバー選択</h3>
-      <div id="group-members"></div>
-      <button id="submit-group-btn">グループ作成</button>
-      <button id="close-group-modal">キャンセル</button>
-    </div>
-  </div>
-
-  <!-- Chat Page -->
+  <!-- Chat Page (private/group) -->
   <div id="page-chat" class="page" style="display:none;">
     <button id="back-to-home">戻る</button>
     <div class="chat-container">
@@ -91,8 +77,23 @@
     </div>
   </div>
 
-  <!-- Socket.IO クライアントライブラリ（サーバー側が同一ドメインの場合） -->
-  <script src="/socket.io/socket.io.js"></script>
+  <!-- グループ作成モーダル -->
+  <div id="group-creation-modal" class="modal" style="display:none;">
+    <div class="modal-content">
+      <span id="close-group-modal" class="close">&times;</span>
+      <h2>グループ作成</h2>
+      <label>グループ名:
+        <input type="text" id="group-name" placeholder="グループ名を入力">
+      </label>
+      <div id="group-members">
+        <!-- 承認済み友達一覧をチェックボックスで表示 -->
+      </div>
+      <button id="create-group-btn">グループ作成</button>
+    </div>
+  </div>
+
+  <!-- Socket.IO クライアントライブラリ（サーバー側のURLに合わせて変更） -->
+  <script src="https://your-server-domain/socket.io/socket.io.js"></script>
   <script src="script.js"></script>
 </body>
 </html>

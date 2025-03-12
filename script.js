@@ -1,13 +1,14 @@
 document.addEventListener("DOMContentLoaded", function() {
-  // Socket.IO 初期化（サーバーURLが同一ドメインの場合）
+  // Socket.IO 初期化（接続先URLはサーバーのURLに合わせてください）
   const socket = io();
 
   // グローバル変数
   let currentUser = null;
-  let currentChatTarget = null; // ユーザー名（文字列）またはグループオブジェクト（{groupId, groupName, members}）
-  let isGroupChat = false;
+  // currentChat: { type: "private" or "group", id: (username or groupId), name: 表示名 }
+  let currentChat = { type: "private", id: null, name: "" };
+  let groups = []; // 作成済みグループ情報
 
-  // DOM 要素取得
+  // DOM要素取得
   const pageAuth = document.getElementById("page-auth");
   const loginForm = document.getElementById("form-login");
   const registrationForm = document.getElementById("form-register");
@@ -30,32 +31,43 @@ document.addEventListener("DOMContentLoaded", function() {
   const chatInput = document.getElementById("chat-input");
   const sendMessageBtn = document.getElementById("send-message");
 
-  // グループ作成モーダル要素
-  const groupModal = document.getElementById("group-modal");
+  // グループ作成モーダル用
+  const openGroupModalBtn = document.getElementById("open-group-modal");
+  const groupModal = document.getElementById("group-creation-modal");
+  const closeGroupModalBtn = document.getElementById("close-group-modal");
   const groupNameInput = document.getElementById("group-name");
   const groupMembersDiv = document.getElementById("group-members");
-  const submitGroupBtn = document.getElementById("submit-group-btn");
-  const closeGroupModalBtn = document.getElementById("close-group-modal");
   const createGroupBtn = document.getElementById("create-group-btn");
 
-  /* ------------------------------
-       イベントリスナー設定
-  ------------------------------ */
-  // フォーム切替
+  /* ----- ページ切替用関数（フェードイン・アウト） ----- */
+  function showPage(page) {
+    // 全ページ非表示
+    document.querySelectorAll(".page").forEach(p => {
+      p.style.display = "none";
+      p.classList.remove("active");
+    });
+    // 表示したいページを表示してフェードイン
+    page.style.display = "block";
+    setTimeout(() => page.classList.add("active"), 50);
+  }
+
+  /* ----- フォーム切替 ----- */
   toRegistrationBtn.addEventListener("click", function() {
-    fadeOut(loginDiv, () => { registrationDiv.style.display = "block"; });
+    loginDiv.style.display = "none";
+    registrationDiv.style.display = "block";
   });
   toLoginBtn.addEventListener("click", function() {
-    fadeOut(registrationDiv, () => { loginDiv.style.display = "block"; });
+    registrationDiv.style.display = "none";
+    loginDiv.style.display = "block";
   });
 
-  // 新規ユーザー登録
+  /* ----- 新規ユーザー登録 ----- */
   registrationForm.addEventListener("submit", async function(e) {
     e.preventDefault();
     const username = document.getElementById("register-username").value;
     const password = document.getElementById("register-password").value;
     try {
-      const res = await fetch('/register', {
+      const res = await fetch('/server/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password })
@@ -73,13 +85,13 @@ document.addEventListener("DOMContentLoaded", function() {
     }
   });
 
-  // ログイン処理
+  /* ----- ログイン処理 ----- */
   loginForm.addEventListener("submit", async function(e) {
     e.preventDefault();
     const username = document.getElementById("login-username").value;
     const password = document.getElementById("login-password").value;
     try {
-      const res = await fetch('/login', {
+      const res = await fetch('/server/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password })
@@ -97,13 +109,100 @@ document.addEventListener("DOMContentLoaded", function() {
     }
   });
 
-  // 友達追加リクエスト送信（ユーザー検索結果から）
+  /* ----- ホーム画面表示 ----- */
+  function showHomePage() {
+    displayUsername.value = currentUser.username;
+    showPage(pageHome);
+    socket.emit('join', currentUser.username);
+    loadApprovedFriends();
+    loadFriendRequests();
+    loadGroups();
+  }
+
+  /* ----- 承認済み友達一覧取得とレンダリング ----- */
+  async function loadApprovedFriends() {
+    try {
+      const res = await fetch(`/server/approvedFriends?username=${currentUser.username}`);
+      const data = await res.json();
+      renderApprovedFriends(data.approvedFriends);
+    } catch(err) {
+      console.error(err);
+    }
+  }
+  function renderApprovedFriends(friends) {
+    contactListUl.innerHTML = "";
+    friends.forEach(friend => {
+      const li = document.createElement("li");
+      li.textContent = friend;
+      li.className = "contact-item";
+      li.addEventListener("click", function() {
+         // プライベートチャット開始
+         openChat("private", friend, friend);
+      });
+      contactListUl.appendChild(li);
+    });
+  }
+
+  /* ----- 友達リクエスト取得とレンダリング ----- */
+  async function loadFriendRequests() {
+    try {
+      const res = await fetch(`/server/friendRequests?username=${currentUser.username}`);
+      const data = await res.json();
+      renderFriendRequests(data.friendRequests);
+    } catch(err) {
+      console.error(err);
+    }
+  }
+  function renderFriendRequests(requests) {
+    friendRequestsUl.innerHTML = "";
+    requests.forEach(requester => {
+      const li = document.createElement("li");
+      li.textContent = requester;
+      li.className = "contact-item";
+      const acceptBtn = document.createElement("button");
+      acceptBtn.textContent = "承認";
+      acceptBtn.addEventListener("click", function() {
+        respondFriendRequest(requester, 'accept');
+      });
+      const declineBtn = document.createElement("button");
+      declineBtn.textContent = "拒否";
+      declineBtn.addEventListener("click", function() {
+        respondFriendRequest(requester, 'decline');
+      });
+      li.appendChild(acceptBtn);
+      li.appendChild(declineBtn);
+      friendRequestsUl.appendChild(li);
+    });
+  }
+  async function respondFriendRequest(from, response) {
+    try {
+      const res = await fetch('/server/respondFriendRequest', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: currentUser.username, from, response })
+      });
+      const data = await res.json();
+      alert(data.message);
+      loadFriendRequests();
+      loadApprovedFriends();
+    } catch(err) {
+      console.error(err);
+    }
+  }
+
+  /* ----- リアルタイムで新規友達リクエスト更新 ----- */
+  socket.on('newFriendRequest', (data) => {
+    // data: { from }
+    loadFriendRequests();
+  });
+
+  /* ----- ユーザー検索 ----- */
   userSearchInput.addEventListener("input", async function() {
     const query = this.value.trim().toLowerCase();
     searchResultUl.innerHTML = "";
     if(query === "") return;
     try {
-      const res = await fetch(`/users?username=${currentUser.username}`);
+      const res = await fetch(`/server/users?username=${currentUser.username}`);
       const data = await res.json();
       const results = data.users.filter(u => u.toLowerCase().includes(query));
       results.forEach(user => {
@@ -112,7 +211,7 @@ document.addEventListener("DOMContentLoaded", function() {
         li.className = "contact-item";
         li.addEventListener("click", async function() {
           try {
-            const res = await fetch('/sendFriendRequest', {
+            const res = await fetch('/server/sendFriendRequest', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ from: currentUser.username, to: user })
@@ -130,25 +229,21 @@ document.addEventListener("DOMContentLoaded", function() {
     }
   });
 
-  // リアルタイム友達リクエスト受信
-  socket.on('new friend request', (data) => {
-    addFriendRequestItem(data.from);
-  });
-
-  // グループ作成ボタン
-  createGroupBtn.addEventListener("click", function() {
-    // モーダル内に連絡可能ユーザーリストのチェックボックスを作成
+  /* ----- グループ作成モーダル表示 ----- */
+  openGroupModalBtn.addEventListener("click", function() {
+    // グループ作成用に、承認済み友達一覧をチェックボックスで表示
     groupMembersDiv.innerHTML = "";
-    const approvedFriends = contactListUl.querySelectorAll(".contact-item");
-    approvedFriends.forEach(item => {
-      const label = document.createElement("label");
+    // 利用可能な友達（既にレンダリング済みの承認済み友達から）
+    Array.from(contactListUl.children).forEach(li => {
       const checkbox = document.createElement("input");
       checkbox.type = "checkbox";
-      checkbox.value = item.textContent;
+      checkbox.value = li.textContent;
+      const label = document.createElement("label");
       label.appendChild(checkbox);
-      label.appendChild(document.createTextNode(item.textContent));
-      groupMembersDiv.appendChild(label);
-      groupMembersDiv.appendChild(document.createElement("br"));
+      label.appendChild(document.createTextNode(li.textContent));
+      const div = document.createElement("div");
+      div.appendChild(label);
+      groupMembersDiv.appendChild(div);
     });
     groupNameInput.value = "";
     groupModal.style.display = "block";
@@ -156,19 +251,21 @@ document.addEventListener("DOMContentLoaded", function() {
   closeGroupModalBtn.addEventListener("click", function() {
     groupModal.style.display = "none";
   });
-  submitGroupBtn.addEventListener("click", async function() {
+  // グループ作成処理
+  createGroupBtn.addEventListener("click", async function() {
     const groupName = groupNameInput.value.trim();
-    const checkboxes = groupMembersDiv.querySelectorAll("input[type='checkbox']");
-    let members = [];
-    checkboxes.forEach(chk => { if(chk.checked) members.push(chk.value); });
-    // 自分もメンバーに追加
-    if(currentUser) members.push(currentUser.username);
-    if(groupName === "" || members.length < 2) {
-      alert("グループ名と2名以上のメンバーが必要です");
+    if(groupName === "") {
+      alert("グループ名を入力してください");
       return;
     }
+    const checkboxes = groupMembersDiv.querySelectorAll("input[type=checkbox]:checked");
+    let members = Array.from(checkboxes).map(cb => cb.value);
+    // 自分も必ずメンバーに含める
+    if(!members.includes(currentUser.username)) {
+      members.push(currentUser.username);
+    }
     try {
-      const res = await fetch('/createGroup', {
+      const res = await fetch('/server/createGroup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ groupName, members })
@@ -177,8 +274,9 @@ document.addEventListener("DOMContentLoaded", function() {
       if(data.error) {
         alert(data.error);
       } else {
-        alert(data.message);
-        loadGroups();
+        alert("グループ作成成功: " + data.group.groupName);
+        groups.push(data.group);
+        renderGroups();
         groupModal.style.display = "none";
       }
     } catch(err) {
@@ -186,217 +284,114 @@ document.addEventListener("DOMContentLoaded", function() {
     }
   });
 
-  // ホーム画面表示
-  function showHomePage() {
-    displayUsername.value = currentUser.username;
-    fadeOut(pageAuth, () => {
-      pageHome.style.display = "block";
-      fadeIn(pageHome);
-    });
-    socket.emit('join', currentUser.username);
-    loadApprovedFriends();
-    loadFriendRequests();
-    loadGroups();
-  }
-
-  // 承認済み友達一覧取得
-  async function loadApprovedFriends() {
-    try {
-      const res = await fetch(`/approvedFriends?username=${currentUser.username}`);
-      const data = await res.json();
-      renderApprovedFriends(data.approvedFriends);
-    } catch(err) {
-      console.error(err);
-    }
-  }
-  function renderApprovedFriends(friends) {
-    contactListUl.innerHTML = "";
-    friends.forEach(friend => {
-      const li = document.createElement("li");
-      li.textContent = friend;
-      li.className = "contact-item";
-      li.addEventListener("click", function() {
-         openChat(friend, false);
-      });
-      contactListUl.appendChild(li);
-    });
-  }
-
-  // 友達リクエスト一覧取得
-  async function loadFriendRequests() {
-    try {
-      const res = await fetch(`/friendRequests?username=${currentUser.username}`);
-      const data = await res.json();
-      friendRequestsUl.innerHTML = "";
-      data.friendRequests.forEach(requester => {
-        addFriendRequestItem(requester);
-      });
-    } catch(err) {
-      console.error(err);
-    }
-  }
-  function addFriendRequestItem(requester) {
-    const li = document.createElement("li");
-    li.textContent = requester;
-    li.className = "contact-item";
-    const acceptBtn = document.createElement("button");
-    acceptBtn.textContent = "承認";
-    acceptBtn.addEventListener("click", function() {
-      respondFriendRequest(requester, 'accept');
-    });
-    const declineBtn = document.createElement("button");
-    declineBtn.textContent = "拒否";
-    declineBtn.addEventListener("click", function() {
-      respondFriendRequest(requester, 'decline');
-    });
-    li.appendChild(acceptBtn);
-    li.appendChild(declineBtn);
-    friendRequestsUl.appendChild(li);
-  }
-  async function respondFriendRequest(from, response) {
-    try {
-      const res = await fetch('/respondFriendRequest', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: currentUser.username, from, response })
-      });
-      const data = await res.json();
-      alert(data.message);
-      loadFriendRequests();
-      loadApprovedFriends();
-    } catch(err) {
-      console.error(err);
-    }
-  }
-
-  // グループ一覧取得
-  async function loadGroups() {
-    try {
-      const res = await fetch(`/groups?username=${currentUser.username}`);
-      const data = await res.json();
-      renderGroups(data.groups);
-    } catch(err) {
-      console.error(err);
-    }
-  }
-  function renderGroups(groups) {
+  /* ----- グループ一覧レンダリング ----- */
+  function renderGroups() {
     groupListUl.innerHTML = "";
     groups.forEach(group => {
       const li = document.createElement("li");
       li.textContent = group.groupName;
       li.className = "contact-item";
       li.addEventListener("click", function() {
-         openChat(group, true);
+        openChat("group", group.groupId, group.groupName);
       });
       groupListUl.appendChild(li);
     });
   }
-
-  // チャット画面を開く（個別 or グループ）
-  function openChat(target, groupFlag) {
-    isGroupChat = groupFlag;
-    currentChatTarget = target; // string または group オブジェクト
-    fadeOut(pageHome, () => {
-      pageChat.style.display = "block";
-      fadeIn(pageChat);
-    });
-    messageHistory.innerHTML = "";
-    if(isGroupChat) {
-      socket.emit('join group', target.groupId);
-      fetch(`/chatHistory?groupId=${target.groupId}`)
-        .then(res => res.json())
-        .then(data => renderChatHistory(data.chatHistory))
-        .catch(err => console.error(err));
-    } else {
-      fetch(`/chatHistory?user1=${currentUser.username}&user2=${target}`)
-        .then(res => res.json())
-        .then(data => renderChatHistory(data.chatHistory))
-        .catch(err => console.error(err));
-    }
+  async function loadGroups() {
+    // ※ 簡易実装：グループ情報はクライアント側にのみ保持（必要に応じてサーバー側保存も可能）
+    // ここでは、既に作成されたグループは groups 配列にあるものとする
+    renderGroups();
   }
-  function renderChatHistory(historyArray) {
-    if(historyArray && historyArray.length > 0) {
-      historyArray.forEach(msgObj => {
+
+  /* ----- チャット画面を開く（private/group） ----- */
+  function openChat(type, id, displayName) {
+    currentChat.type = type;
+    currentChat.id = id;
+    currentChat.name = displayName;
+    messageHistory.innerHTML = "";
+    if(type === "private") {
+      // プライベートチャット履歴取得
+      fetch(`/server/chatHistory?user1=${currentUser.username}&user2=${id}`)
+      .then(res => res.json())
+      .then(data => renderChatHistory(data.chatHistory))
+      .catch(err => console.error(err));
+    } else if(type === "group") {
+      // グループチャット履歴取得
+      fetch(`/server/groupChatHistory?groupId=${id}`)
+      .then(res => res.json())
+      .then(data => renderChatHistory(data.chatHistory))
+      .catch(err => console.error(err));
+      // 参加していなければグループルームに参加
+      socket.emit('joinGroup', id);
+    }
+    showPage(pageChat);
+  }
+  function renderChatHistory(history) {
+    if(history && history.length > 0) {
+      history.forEach(msgObj => {
         appendMessage(msgObj.from, msgObj.message, msgObj.timestamp);
       });
     } else {
-      appendMessage('', "チャット開始", new Date().toISOString());
+      const welcome = document.createElement("div");
+      welcome.textContent = "チャット開始: " + currentChat.name;
+      messageHistory.appendChild(welcome);
     }
     messageHistory.scrollTop = messageHistory.scrollHeight;
   }
 
-  // メッセージ送信処理
+  /* ----- メッセージ送信 ----- */
   sendMessageBtn.addEventListener("click", function() {
     const msg = chatInput.value.trim();
-    if(msg === "" || currentChatTarget === null) return;
-    const now = new Date().toISOString();
-    appendMessage(currentUser.username, msg, now);
-    if(isGroupChat) {
-      socket.emit('group message', { groupId: currentChatTarget.groupId, message: msg });
-    } else {
-      socket.emit('private message', { to: currentChatTarget, message: msg });
+    if(msg === "" || !currentChat.id) return;
+    const timestamp = new Date().toISOString();
+    appendMessage(currentUser.username, msg, timestamp);
+    if(currentChat.type === "private") {
+      socket.emit('private message', { to: currentChat.id, message: msg, timestamp });
+    } else if(currentChat.type === "group") {
+      socket.emit('group message', { groupId: currentChat.id, message: msg });
     }
     chatInput.value = "";
     messageHistory.scrollTop = messageHistory.scrollHeight;
   });
 
-  // 受信したメッセージの表示
-  socket.on('private message', (data) => {
-    if(!isGroupChat && data.from === currentChatTarget) {
-      appendMessage(data.from, data.message, new Date().toISOString());
-    }
-  });
-  socket.on('group message', (data) => {
-    if(isGroupChat && data.groupId === currentChatTarget.groupId) {
-      appendMessage(data.from, data.message, data.timestamp);
-    }
-  });
-
-  // メッセージ追加（左右寄せ＆タイムスタンプ付き）
-  function appendMessage(from, message, timestamp) {
+  /* ----- メッセージ表示（送信者によって左右・日時表示） ----- */
+  function appendMessage(sender, message, timestamp) {
     const div = document.createElement("div");
     div.classList.add("message");
-    if(from === currentUser.username) {
-      div.classList.add("message-self");
+    // 自分の送信メッセージは右寄せ
+    if(sender === currentUser.username) {
+      div.classList.add("message-right");
     } else {
-      div.classList.add("message-other");
+      div.classList.add("message-left");
     }
-    div.innerHTML = message;
-    const tsSpan = document.createElement("span");
-    tsSpan.className = "timestamp";
-    tsSpan.textContent = formatTimestamp(timestamp);
-    div.appendChild(tsSpan);
+    // 表示内容に送信者名（グループの場合は必ず表示）、本文、日時を追加
+    let senderText = (currentChat.type === "group" && sender !== currentUser.username) ? sender + ": " : "";
+    div.innerHTML = `<span>${senderText}${message}</span><span class="timestamp">${formatTimestamp(timestamp)}</span>`;
     messageHistory.appendChild(div);
-    messageHistory.scrollTop = messageHistory.scrollHeight;
   }
   function formatTimestamp(ts) {
     const d = new Date(ts);
     return d.toLocaleString();
   }
 
-  // ページ遷移フェード用
-  function fadeOut(element, callback) {
-    element.style.opacity = 1;
-    const fadeEffect = setInterval(() => {
-      if (element.style.opacity > 0) {
-        element.style.opacity -= 0.1;
-      } else {
-        clearInterval(fadeEffect);
-        element.style.display = "none";
-        if(callback) callback();
-      }
-    }, 30);
-  }
-  function fadeIn(element) {
-    element.style.display = "block";
-    element.style.opacity = 0;
-    const fadeEffect = setInterval(() => {
-      let opacity = parseFloat(element.style.opacity);
-      if (opacity < 1) {
-        element.style.opacity = opacity + 0.1;
-      } else {
-        clearInterval(fadeEffect);
-      }
-    }, 30);
-  }
+  /* ----- 戻るボタン ----- */
+  backToHomeBtn.addEventListener("click", function() {
+    showPage(pageHome);
+  });
+
+  /* ----- Socket.IO イベント ----- */
+  // 受信したプライベートメッセージ
+  socket.on('private message', (data) => {
+    if(currentChat.type === "private" && data.from === currentChat.id) {
+      appendMessage(data.from, data.message, data.timestamp || new Date().toISOString());
+      messageHistory.scrollTop = messageHistory.scrollHeight;
+    }
+  });
+  // 受信したグループメッセージ
+  socket.on('group message', (data) => {
+    if(currentChat.type === "group" && data.groupId === currentChat.id) {
+      appendMessage(data.from, data.message, data.timestamp || new Date().toISOString());
+      messageHistory.scrollTop = messageHistory.scrollHeight;
+    }
+  });
 });

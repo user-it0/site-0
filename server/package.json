@@ -1,7 +1,7 @@
 {
   "name": "smart-chat-app-server",
   "version": "1.0.0",
-  "description": "Node.js server for Smart Chat App with persistent chat history and group chat support",
+  "description": "Node.js server for Smart Chat App with persistent chat history and group chat",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
