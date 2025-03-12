@@ -1,5 +1,5 @@
 document.addEventListener("DOMContentLoaded", function() {
-  // Socket.IO 初期化（サーバーの URL に合わせる）
+  // Socket.IO 初期化（サーバーURLが同一ドメインの場合）
   const socket = io();
 
   // グローバル変数
@@ -55,7 +55,7 @@ document.addEventListener("DOMContentLoaded", function() {
     const username = document.getElementById("register-username").value;
     const password = document.getElementById("register-password").value;
     try {
-      const res = await fetch('/server/register', {
+      const res = await fetch('/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password })
@@ -79,7 +79,7 @@ document.addEventListener("DOMContentLoaded", function() {
     const username = document.getElementById("login-username").value;
     const password = document.getElementById("login-password").value;
     try {
-      const res = await fetch('/server/login', {
+      const res = await fetch('/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password })
@@ -103,7 +103,7 @@ document.addEventListener("DOMContentLoaded", function() {
     searchResultUl.innerHTML = "";
     if(query === "") return;
     try {
-      const res = await fetch(`/server/users?username=${currentUser.username}`);
+      const res = await fetch(`/users?username=${currentUser.username}`);
       const data = await res.json();
       const results = data.users.filter(u => u.toLowerCase().includes(query));
       results.forEach(user => {
@@ -112,7 +112,7 @@ document.addEventListener("DOMContentLoaded", function() {
         li.className = "contact-item";
         li.addEventListener("click", async function() {
           try {
-            const res = await fetch('/server/sendFriendRequest', {
+            const res = await fetch('/sendFriendRequest', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ from: currentUser.username, to: user })
@@ -168,7 +168,7 @@ document.addEventListener("DOMContentLoaded", function() {
       return;
     }
     try {
-      const res = await fetch('/server/createGroup', {
+      const res = await fetch('/createGroup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ groupName, members })
@@ -202,7 +202,7 @@ document.addEventListener("DOMContentLoaded", function() {
   // 承認済み友達一覧取得
   async function loadApprovedFriends() {
     try {
-      const res = await fetch(`/server/approvedFriends?username=${currentUser.username}`);
+      const res = await fetch(`/approvedFriends?username=${currentUser.username}`);
       const data = await res.json();
       renderApprovedFriends(data.approvedFriends);
     } catch(err) {
@@ -225,7 +225,7 @@ document.addEventListener("DOMContentLoaded", function() {
   // 友達リクエスト一覧取得
   async function loadFriendRequests() {
     try {
-      const res = await fetch(`/server/friendRequests?username=${currentUser.username}`);
+      const res = await fetch(`/friendRequests?username=${currentUser.username}`);
       const data = await res.json();
       friendRequestsUl.innerHTML = "";
       data.friendRequests.forEach(requester => {
@@ -255,7 +255,7 @@ document.addEventListener("DOMContentLoaded", function() {
   }
   async function respondFriendRequest(from, response) {
     try {
-      const res = await fetch('/server/respondFriendRequest', {
+      const res = await fetch('/respondFriendRequest', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username: currentUser.username, from, response })
@@ -272,7 +272,7 @@ document.addEventListener("DOMContentLoaded", function() {
   // グループ一覧取得
   async function loadGroups() {
     try {
-      const res = await fetch(`/server/groups?username=${currentUser.username}`);
+      const res = await fetch(`/groups?username=${currentUser.username}`);
       const data = await res.json();
       renderGroups(data.groups);
     } catch(err) {
@@ -292,25 +292,23 @@ document.addEventListener("DOMContentLoaded", function() {
     });
   }
 
-  // チャット画面を開く（ユーザー間またはグループ）
+  // チャット画面を開く（個別 or グループ）
   function openChat(target, groupFlag) {
     isGroupChat = groupFlag;
-    currentChatTarget = target; // string（個別） or object（グループ）
+    currentChatTarget = target; // string または group オブジェクト
     fadeOut(pageHome, () => {
       pageChat.style.display = "block";
       fadeIn(pageChat);
     });
     messageHistory.innerHTML = "";
     if(isGroupChat) {
-      // グループの場合、参加（ルーム join）
       socket.emit('join group', target.groupId);
-      fetch(`/server/chatHistory?groupId=${target.groupId}`)
+      fetch(`/chatHistory?groupId=${target.groupId}`)
         .then(res => res.json())
         .then(data => renderChatHistory(data.chatHistory))
         .catch(err => console.error(err));
     } else {
-      // 個別チャットの場合（user1とuser2）
-      fetch(`/server/chatHistory?user1=${currentUser.username}&user2=${target}`)
+      fetch(`/chatHistory?user1=${currentUser.username}&user2=${target}`)
         .then(res => res.json())
         .then(data => renderChatHistory(data.chatHistory))
         .catch(err => console.error(err));
@@ -322,8 +320,7 @@ document.addEventListener("DOMContentLoaded", function() {
         appendMessage(msgObj.from, msgObj.message, msgObj.timestamp);
       });
     } else {
-      const welcome = { from: '', message: "チャット開始", timestamp: new Date().toISOString() };
-      appendMessage('', welcome.message, welcome.timestamp);
+      appendMessage('', "チャット開始", new Date().toISOString());
     }
     messageHistory.scrollTop = messageHistory.scrollHeight;
   }
@@ -343,20 +340,19 @@ document.addEventListener("DOMContentLoaded", function() {
     messageHistory.scrollTop = messageHistory.scrollHeight;
   });
 
-  // 受信したプライベートメッセージの表示
+  // 受信したメッセージの表示
   socket.on('private message', (data) => {
     if(!isGroupChat && data.from === currentChatTarget) {
       appendMessage(data.from, data.message, new Date().toISOString());
     }
   });
-  // 受信したグループメッセージの表示
   socket.on('group message', (data) => {
     if(isGroupChat && data.groupId === currentChatTarget.groupId) {
       appendMessage(data.from, data.message, data.timestamp);
     }
   });
 
-  // メッセージの追加（左右寄せ＋タイムスタンプ付き）
+  // メッセージ追加（左右寄せ＆タイムスタンプ付き）
   function appendMessage(from, message, timestamp) {
     const div = document.createElement("div");
     div.classList.add("message");
@@ -365,9 +361,7 @@ document.addEventListener("DOMContentLoaded", function() {
     } else {
       div.classList.add("message-other");
     }
-    // メッセージ本文
     div.innerHTML = message;
-    // タイムスタンプ
     const tsSpan = document.createElement("span");
     tsSpan.className = "timestamp";
     tsSpan.textContent = formatTimestamp(timestamp);
@@ -380,7 +374,7 @@ document.addEventListener("DOMContentLoaded", function() {
     return d.toLocaleString();
   }
 
-  // ページ遷移用フェードアウト／フェードイン
+  // ページ遷移フェード用
   function fadeOut(element, callback) {
     element.style.opacity = 1;
     const fadeEffect = setInterval(() => {
