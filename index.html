@@ -9,16 +9,14 @@
 <body>
   <!-- Authentication Page -->
   <div id="page-auth" class="page">
-    <div id="login-form">
+    <div id="login-form" class="form-container">
       <h1>ログイン</h1>
       <form id="form-login">
-        <label>
-          ユーザー名:
+        <label>ユーザー名:
           <input type="text" id="login-username" required>
         </label>
         <br>
-        <label>
-          パスワード:
+        <label>パスワード:
           <input type="password" id="login-password" required>
         </label>
         <br>
@@ -26,16 +24,14 @@
       </form>
       <button id="to-registration">新規登録はこちら</button>
     </div>
-    <div id="registration-form" style="display:none;">
+    <div id="registration-form" class="form-container" style="display:none;">
       <h1>新規ユーザー登録</h1>
       <form id="form-register">
-        <label>
-          ユーザー名:
+        <label>ユーザー名:
           <input type="text" id="register-username" required>
         </label>
         <br>
-        <label>
-          パスワード:
+        <label>パスワード:
           <input type="password" id="register-password" required>
         </label>
         <br>
@@ -65,18 +61,21 @@
     </section>
     <section>
       <h2>グループチャット</h2>
-      <ul class="group-list" id="group-list"></ul>
+      <ul class="contact-list" id="group-list"></ul>
     </section>
-    <!-- グループ作成モーダル -->
-    <div id="group-modal" class="modal" style="display:none;">
-      <div class="modal-content">
-        <span id="close-group-modal" class="close">&times;</span>
-        <h2>グループ作成</h2>
-        <label>グループ名: <input type="text" id="group-name"></label>
-        <h3>メンバー選択</h3>
-        <ul id="group-members-list"></ul>
-        <button id="create-group-confirm">グループ作成</button>
-      </div>
+  </div>
+
+  <!-- Group Creation Modal -->
+  <div id="group-modal" class="modal" style="display:none;">
+    <div class="modal-content">
+      <h2>グループ作成</h2>
+      <label>グループ名:
+        <input type="text" id="group-name" required>
+      </label>
+      <h3>メンバー選択</h3>
+      <div id="group-members"></div>
+      <button id="submit-group-btn">グループ作成</button>
+      <button id="close-group-modal">キャンセル</button>
     </div>
   </div>
 
@@ -92,7 +91,7 @@
     </div>
   </div>
 
-  <!-- Socket.IO クライアントライブラリ（サーバー側の URL に合わせて変更） -->
+  <!-- Socket.IO クライアントライブラリ（接続先は実際のサーバー URL に合わせて変更） -->
   <script src="https://your-server-domain-or-ip/socket.io/socket.io.js"></script>
   <script src="script.js"></script>
 </body>
