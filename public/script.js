@@ -211,7 +211,6 @@ document.addEventListener("DOMContentLoaded", function() {
 
   // リアルタイムで友達追加リクエストを受信
   socket.on('newFriendRequest', (data) => {
-    // data: { from }
     const li = document.createElement("li");
     li.className = "contact-item";
     li.textContent = data.from;
@@ -249,13 +248,11 @@ document.addEventListener("DOMContentLoaded", function() {
 
   // グループ作成ボタン
   btnCreateGroup.addEventListener("click", () => {
-    // モーダル表示
     showGroupModal();
   });
 
   // グループ作成モーダル表示処理
   function showGroupModal() {
-    // モーダル内に、承認済み友達のリスト（チェックボックス）を表示
     groupMembersListDiv.innerHTML = "";
     approvedFriends.forEach(friend => {
       const label = document.createElement("label");
@@ -283,13 +280,11 @@ document.addEventListener("DOMContentLoaded", function() {
       alert("グループ名を入力してください");
       return;
     }
-    // 選択されたメンバー取得
     const checkboxes = groupMembersListDiv.querySelectorAll("input[type='checkbox']");
     let members = [];
     checkboxes.forEach(cb => {
       if (cb.checked) members.push(cb.value);
     });
-    // 自分もメンバーに含める
     if (!members.includes(currentUser.username)) {
       members.push(currentUser.username);
     }
@@ -313,11 +308,10 @@ document.addEventListener("DOMContentLoaded", function() {
     }
   });
 
-  // チャット画面を開く（個別チャット）
+  // 個別チャット画面を開く
   function openChat(friend) {
     currentChatTarget = friend;
     messageHistory.innerHTML = "";
-    // 取得：個別チャット履歴
     fetch(`/chatHistory?user1=${currentUser.username}&user2=${friend}`)
       .then(res => res.json())
       .then(data => {
@@ -339,9 +333,8 @@ document.addEventListener("DOMContentLoaded", function() {
 
   // グループチャットを開く
   function openGroupChat(group) {
-    currentChatTarget = group; // オブジェクトとして保持
+    currentChatTarget = group;
     messageHistory.innerHTML = "";
-    // 取得：グループチャット履歴（キーはgroupId）
     fetch(`/chatHistory?user1=${group.groupId}&user2=${group.groupId}`)
       .then(res => res.json())
       .then(data => {
@@ -358,12 +351,11 @@ document.addEventListener("DOMContentLoaded", function() {
         console.error(err);
         appendSystemMessage("グループチャット開始: " + group.groupName);
       });
-    // ルーム参加：グループIDでSocket.IOのルームに入る
     socket.emit('join', group.groupId);
     showPage(pageChat);
   }
 
-  // メッセージ要素生成（メッセージバブル＋タイムスタンプ）
+  // メッセージ表示処理（左右バブル＋タイムスタンプ）
   function appendMessage(msgObj, isSent, timestamp) {
     const div = document.createElement("div");
     div.className = "message " + (isSent ? "message-sent" : "message-received");
@@ -371,7 +363,7 @@ document.addEventListener("DOMContentLoaded", function() {
     messageHistory.appendChild(div);
   }
 
-  // システムメッセージ（例：チャット開始）表示
+  // システムメッセージ表示
   function appendSystemMessage(text) {
     const div = document.createElement("div");
     div.style.textAlign = "center";
@@ -380,22 +372,20 @@ document.addEventListener("DOMContentLoaded", function() {
     messageHistory.appendChild(div);
   }
 
-  // タイムスタンプ整形（例：HH:MM, 日付）
+  // タイムスタンプ整形
   function formatTimestamp(ts) {
     const d = new Date(ts);
     return d.toLocaleString();
   }
 
-  // 送信ボタン処理（個別 or グループ判別）
+  // 送信ボタン処理（個別orグループ判定）
   sendMessageBtn.addEventListener("click", () => {
     const msg = chatInput.value.trim();
     if (!msg || !currentChatTarget) return;
     const timestamp = new Date().toISOString();
-    // 自分のメッセージを表示（右側）
     appendMessage({ message: msg }, true, timestamp);
     chatInput.value = "";
     messageHistory.scrollTop = messageHistory.scrollHeight;
-    // 送信先が個別チャット（文字列）かグループ（オブジェクトかどうか）で分岐
     if (typeof currentChatTarget === "string") {
       socket.emit('private message', { to: currentChatTarget, message: msg });
     } else if (currentChatTarget.groupId) {
@@ -418,7 +408,6 @@ document.addEventListener("DOMContentLoaded", function() {
 
   // 受信メッセージ（グループチャット）
   socket.on('group message', (data) => {
-    // 受信したグループメッセージは、開いているチャットが該当グループの場合のみ表示
     if (currentChatTarget && currentChatTarget.groupId === data.groupId) {
       appendMessage(data, data.from === currentUser.username, data.timestamp);
       messageHistory.scrollTop = messageHistory.scrollHeight;
