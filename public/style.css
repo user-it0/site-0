@@ -1,5 +1,5 @@
 /* 基本スタイル */
-body {
+html, body {
   font-family: Arial, sans-serif;
   margin: 0;
   padding: 0;
@@ -18,15 +18,16 @@ body {
   pointer-events: none;
 }
 
-/* ヘッダー */
+/* ヘッダー（上部余白をなくすため、padding-top を0に設定） */
 header {
-  padding: 10px;
+  padding: 0 10px 10px 10px;  /* 上部のパディングを0に */
   background-color: #f7f7f7;
+  margin: 0;
 }
-input[readonly] {
-  border: none;
-  background-color: transparent;
-  font-size: 1.2em;
+
+/* h1 のデフォルトマージン削除 */
+h1 {
+  margin: 0;
 }
 
 /* 認証フォーム */
