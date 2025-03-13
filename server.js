@@ -8,11 +8,9 @@ const path = require('path');
 app.use(express.json());
 app.use(express.static('public'));
 
-// 永続的チャット履歴保存用ファイル
+// チャット履歴の永続保存用ファイル
 const chatHistoryFile = path.join(__dirname, 'chatHistory.json');
 let chatHistory = {};
-
-// ファイルが存在すれば読み込み
 if (fs.existsSync(chatHistoryFile)) {
   try {
     chatHistory = JSON.parse(fs.readFileSync(chatHistoryFile));
@@ -22,14 +20,15 @@ if (fs.existsSync(chatHistoryFile)) {
   }
 }
 
-// 簡易メモリ内ユーザーストア
-// 各ユーザーは { username, password, approvedFriends: [], friendRequests: [] }
+// 簡易的なユーザーストア（メモリ上）
+// 各ユーザー： { username, password, approvedFriends: [], friendRequests: [] }
 let users = [];
 
-// グループ情報（各グループは { groupId, groupName, members: [] }）
+// グループチャット用ストア（メモリ上）
+// 各グループ： { groupId, groupName, members: [username, ...] }
 let groups = [];
 
-/* ----- ユーザー関連API ----- */
+// ユーザー登録
 app.post('/register', (req, res) => {
   const { username, password } = req.body;
   if (users.find(u => u.username === username)) {
@@ -40,6 +39,7 @@ app.post('/register', (req, res) => {
   res.json({ message: '登録成功', user: newUser });
 });
 
+// ログイン
 app.post('/login', (req, res) => {
   const { username, password } = req.body;
   let user = users.find(u => u.username === username && u.password === password);
@@ -49,13 +49,14 @@ app.post('/login', (req, res) => {
   res.json({ message: 'ログイン成功', user });
 });
 
+// 登録済みユーザー一覧（ログインユーザーは除外）
 app.get('/users', (req, res) => {
   const { username } = req.query;
   const filtered = users.filter(u => u.username !== username).map(u => u.username);
   res.json({ users: filtered });
 });
 
-/* ----- 友達リクエスト関連 ----- */
+// 友達追加リクエスト送信（送信後、対象ユーザーへリアルタイム通知）
 app.post('/sendFriendRequest', (req, res) => {
   const { from, to } = req.body;
   let targetUser = users.find(u => u.username === to);
@@ -66,11 +67,12 @@ app.post('/sendFriendRequest', (req, res) => {
     return res.status(400).json({ error: '既にリクエストを送信済みです' });
   }
   targetUser.friendRequests.push(from);
-  res.json({ message: '友達追加リクエストを送信しました' });
-  // リアルタイム更新：対象ユーザーにイベント送信
+  // 対象ユーザーにSocket.IOで通知
   io.to(to).emit('newFriendRequest', { from });
+  res.json({ message: '友達追加リクエストを送信しました' });
 });
 
+// 友達リクエスト一覧取得
 app.get('/friendRequests', (req, res) => {
   const { username } = req.query;
   let user = users.find(u => u.username === username);
@@ -80,6 +82,7 @@ app.get('/friendRequests', (req, res) => {
   res.json({ friendRequests: user.friendRequests });
 });
 
+// 友達リクエストへの応答（承認または拒否）
 app.post('/respondFriendRequest', (req, res) => {
   const { username, from, response } = req.body;
   let user = users.find(u => u.username === username);
@@ -99,12 +102,13 @@ app.post('/respondFriendRequest', (req, res) => {
     if (fromUser && !fromUser.approvedFriends.includes(username)) {
       fromUser.approvedFriends.push(username);
     }
-    return res.json({ message: '友達追加リクエストを承認しました' });
+    res.json({ message: '友達追加リクエストを承認しました' });
   } else {
-    return res.json({ message: '友達追加リクエストを拒否しました' });
+    res.json({ message: '友達追加リクエストを拒否しました' });
   }
 });
 
+// 承認済み友達一覧取得
 app.get('/approvedFriends', (req, res) => {
   const { username } = req.query;
   let user = users.find(u => u.username === username);
@@ -114,27 +118,20 @@ app.get('/approvedFriends', (req, res) => {
   res.json({ approvedFriends: user.approvedFriends });
 });
 
-/* ----- グループ関連 ----- */
+// グループ作成（グループ名と参加メンバーの配列を受け取る）
 app.post('/createGroup', (req, res) => {
   const { groupName, members } = req.body;
-  if (!groupName || !members || !Array.isArray(members) || members.length === 0) {
-    return res.status(400).json({ error: 'グループ名とメンバーが必要です' });
-  }
   const groupId = 'group-' + Date.now();
   const newGroup = { groupId, groupName, members };
   groups.push(newGroup);
+  // 各参加者にグループ作成通知（リアルタイム更新用）
+  newGroup.members.forEach(member => {
+    io.to(member).emit('groupCreated', { group: newGroup });
+  });
   res.json({ message: 'グループ作成成功', group: newGroup });
 });
 
-app.get('/groupChatHistory', (req, res) => {
-  const { groupId } = req.query;
-  if (!groupId) return res.status(400).json({ error: 'groupId is required' });
-  const conversationKey = `group|${groupId}`;
-  const history = chatHistory[conversationKey] || [];
-  res.json({ chatHistory: history });
-});
-
-/* ----- チャット履歴取得（プライベート） ----- */
+// チャット履歴取得（個別チャットの場合はユーザー同士、グループの場合はグループIDをキーにする）
 app.get('/chatHistory', (req, res) => {
   const { user1, user2 } = req.query;
   if (!user1 || !user2) {
@@ -145,61 +142,43 @@ app.get('/chatHistory', (req, res) => {
   res.json({ chatHistory: history });
 });
 
-/* ----- Socket.IO イベント ----- */
+// Socket.IO の接続処理
 io.on('connection', (socket) => {
   console.log('a user connected');
-
-  // ユーザー名を受け取り、個人ルームに参加
+  
+  // ユーザー名を受け取り、そのユーザー専用のルームに参加（リアルタイム通知用）
   socket.on('join', (username) => {
     socket.username = username;
     socket.join(username);
     console.log(username + ' joined their room');
   });
-
-  // グループチャット参加用（クライアントから発火）
-  socket.on('joinGroup', (groupId) => {
-    socket.join(groupId);
-    console.log(`${socket.username} joined group room ${groupId}`);
-  });
-
-  // プライベートメッセージ送信
+  
+  // プライベートメッセージ送信（送信と同時にタイムスタンプ付与）
   socket.on('private message', (data) => {
+    const timestamp = new Date().toISOString();
     console.log(`Message from ${socket.username} to ${data.to}: ${data.message}`);
-    io.to(data.to).emit('private message', { from: socket.username, message: data.message, timestamp: data.timestamp });
+    io.to(data.to).emit('private message', { from: socket.username, message: data.message, timestamp });
     
     const conversationKey = [socket.username, data.to].sort().join('|');
-    if (!chatHistory[conversationKey]) {
-      chatHistory[conversationKey] = [];
-    }
-    const messageObj = {
-      from: socket.username,
-      to: data.to,
-      message: data.message,
-      timestamp: data.timestamp || new Date().toISOString()
-    };
+    if (!chatHistory[conversationKey]) chatHistory[conversationKey] = [];
+    const messageObj = { from: socket.username, to: data.to, message: data.message, timestamp };
     chatHistory[conversationKey].push(messageObj);
-    fs.writeFile(chatHistoryFile, JSON.stringify(chatHistory, null, 2), (err) => {
+    fs.writeFile(chatHistoryFile, JSON.stringify(chatHistory, null, 2), err => {
       if (err) console.error('Error saving chat history:', err);
     });
   });
-
+  
   // グループメッセージ送信
   socket.on('group message', (data) => {
-    console.log(`Group message in ${data.groupId} from ${socket.username}: ${data.message}`);
-    io.to(data.groupId).emit('group message', { from: socket.username, message: data.message, groupId: data.groupId, timestamp: new Date().toISOString() });
+    const timestamp = new Date().toISOString();
+    console.log(`Group message from ${socket.username} in group ${data.groupId}: ${data.message}`);
+    io.to(data.groupId).emit('group message', { from: socket.username, groupId: data.groupId, message: data.message, timestamp });
     
-    const conversationKey = `group|${data.groupId}`;
-    if (!chatHistory[conversationKey]) {
-      chatHistory[conversationKey] = [];
-    }
-    const messageObj = {
-      from: socket.username,
-      message: data.message,
-      timestamp: new Date().toISOString()
-    };
-    chatHistory[conversationKey].push(messageObj);
-    fs.writeFile(chatHistoryFile, JSON.stringify(chatHistory, null, 2), (err) => {
-      if (err) console.error('Error saving group chat history:', err);
+    if (!chatHistory[data.groupId]) chatHistory[data.groupId] = [];
+    const messageObj = { from: socket.username, message: data.message, timestamp };
+    chatHistory[data.groupId].push(messageObj);
+    fs.writeFile(chatHistoryFile, JSON.stringify(chatHistory, null, 2), err => {
+      if (err) console.error('Error saving chat history:', err);
     });
   });
 });

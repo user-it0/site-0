@@ -7,48 +7,44 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <!-- Authentication Page -->
-  <div id="page-auth" class="page">
-    <div id="login-form" class="form-container">
+  <!-- 認証ページ -->
+  <div id="page-auth" class="page visible">
+    <div id="login-form">
       <h1>ログイン</h1>
       <form id="form-login">
         <label>ユーザー名:
           <input type="text" id="login-username" required>
-        </label>
-        <br>
+        </label><br>
         <label>パスワード:
           <input type="password" id="login-password" required>
-        </label>
-        <br>
+        </label><br>
         <button type="submit">ログイン</button>
       </form>
       <button id="to-registration">新規登録はこちら</button>
     </div>
-    <div id="registration-form" class="form-container" style="display:none;">
+    <div id="registration-form" style="display:none;">
       <h1>新規ユーザー登録</h1>
       <form id="form-register">
         <label>ユーザー名:
           <input type="text" id="register-username" required>
-        </label>
-        <br>
+        </label><br>
         <label>パスワード:
           <input type="password" id="register-password" required>
-        </label>
-        <br>
+        </label><br>
         <button type="submit">登録</button>
       </form>
       <button id="to-login">ログインはこちら</button>
     </div>
   </div>
 
-  <!-- Home Page -->
-  <div id="page-home" class="page" style="display:none;">
+  <!-- ホームページ -->
+  <div id="page-home" class="page hidden">
     <header>
       <input type="text" id="display-username" value="" readonly>
     </header>
-    <section id="search-section">
+    <section>
       <input type="text" id="user-search" placeholder="ユーザー検索">
-      <button id="open-group-modal">グループ作成</button>
+      <button id="create-group-btn">グループ作成</button>
       <ul id="search-result"></ul>
     </section>
     <section>
@@ -56,17 +52,13 @@
       <ul id="friend-requests"></ul>
     </section>
     <section>
-      <h2>連絡可能ユーザーリスト</h2>
-      <ul class="contact-list" id="contact-list"></ul>
-    </section>
-    <section>
-      <h2>グループ一覧</h2>
-      <ul class="contact-list" id="group-list"></ul>
+      <h2>連絡可能ユーザー＆グループリスト</h2>
+      <ul id="contact-list"></ul>
     </section>
   </div>
 
-  <!-- Chat Page (private/group) -->
-  <div id="page-chat" class="page" style="display:none;">
+  <!-- チャットページ -->
+  <div id="page-chat" class="page hidden">
     <button id="back-to-home">戻る</button>
     <div class="chat-container">
       <div class="message-history" id="message-history"></div>
@@ -78,22 +70,19 @@
   </div>
 
   <!-- グループ作成モーダル -->
-  <div id="group-creation-modal" class="modal" style="display:none;">
+  <div id="group-modal" class="modal" style="display:none;">
     <div class="modal-content">
       <span id="close-group-modal" class="close">&times;</span>
       <h2>グループ作成</h2>
-      <label>グループ名:
-        <input type="text" id="group-name" placeholder="グループ名を入力">
-      </label>
-      <div id="group-members">
-        <!-- 承認済み友達一覧をチェックボックスで表示 -->
-      </div>
-      <button id="create-group-btn">グループ作成</button>
+      <input type="text" id="group-name" placeholder="グループ名"><br>
+      <h3>メンバー選択</h3>
+      <div id="group-members-list"></div>
+      <button id="create-group-confirm">グループ作成</button>
     </div>
   </div>
 
-  <!-- Socket.IO クライアントライブラリ（サーバー側のURLに合わせて変更） -->
-  <script src="https://your-server-domain/socket.io/socket.io.js"></script>
+  <!-- Socket.IO クライアントライブラリ（サーバーURLに合わせて変更） -->
+  <script src="/socket.io/socket.io.js"></script>
   <script src="script.js"></script>
 </body>
 </html>

@@ -1,18 +1,21 @@
-/* 基本設定 */
+/* 基本スタイル */
 body {
   font-family: Arial, sans-serif;
   margin: 0;
   padding: 0;
-  background: #f2f2f2;
 }
 
-/* ページ切替のフェードイン・フェードアウト */
+/* ページコンテナ（フェード用クラス） */
 .page {
-  opacity: 0;
   transition: opacity 0.5s ease;
 }
-.page.active {
+.visible {
   opacity: 1;
+  pointer-events: auto;
+}
+.hidden {
+  opacity: 0;
+  pointer-events: none;
 }
 
 /* ヘッダー */
@@ -26,18 +29,17 @@ input[readonly] {
   font-size: 1.2em;
 }
 
-/* フォーム中央寄せ */
-.form-container {
+/* 認証フォーム */
+#page-auth > div {
   max-width: 400px;
   margin: 50px auto;
   padding: 20px;
-  background: #fff;
   border: 1px solid #ccc;
   border-radius: 8px;
 }
 
-/* リスト */
-.contact-list, #search-result, #friend-requests {
+/* リスト（友達、検索結果、連絡可能ユーザー） */
+#contact-list, #search-result, #friend-requests {
   list-style: none;
   padding: 0;
 }
@@ -46,10 +48,10 @@ input[readonly] {
   padding: 10px;
   display: flex;
   align-items: center;
+  cursor: pointer;
 }
 .contact-item:hover {
   background-color: #f0f0f0;
-  cursor: pointer;
 }
 
 /* チャット画面 */
@@ -59,14 +61,14 @@ input[readonly] {
   height: 90vh;
   max-width: 600px;
   margin: 20px auto;
-  background: #fff;
   border: 1px solid #ccc;
 }
 .message-history {
   flex: 1;
   overflow-y: auto;
-  border-bottom: 1px solid #ccc;
   padding: 10px;
+  display: flex;
+  flex-direction: column;
 }
 .message-input {
   display: flex;
@@ -78,40 +80,41 @@ input[readonly] {
 }
 .message-input button {
   padding: 10px;
-}
-button {
   cursor: pointer;
 }
 
-/* メッセージ配置（LINE風） */
+/* メッセージバブル */
 .message {
-  margin: 5px 0;
-  max-width: 80%;
+  max-width: 70%;
   padding: 8px 12px;
-  border-radius: 16px;
+  margin: 5px;
+  border-radius: 15px;
   position: relative;
+  transition: all 0.3s ease;
+  word-break: break-all;
 }
-.message-left {
-  background-color: #e5e5ea;
-  text-align: left;
-  margin-right: auto;
-}
-.message-right {
-  background-color: #007aff;
-  color: #fff;
+.message-sent {
+  background-color: #DCF8C6;
+  align-self: flex-end;
   text-align: right;
-  margin-left: auto;
 }
+.message-received {
+  background-color: #fff;
+  align-self: flex-start;
+  text-align: left;
+  border: 1px solid #ccc;
+}
+/* タイムスタンプ */
 .timestamp {
   display: block;
   font-size: 0.7em;
-  color: #555;
-  margin-top: 2px;
+  color: #888;
+  margin-top: 4px;
 }
 
 /* グループ作成モーダル */
 .modal {
-  display: none;
+  display: block; /* 初期は非表示（script.jsで切り替え） */
   position: fixed;
   z-index: 100;
   left: 0;
@@ -122,16 +125,14 @@ button {
   background-color: rgba(0,0,0,0.4);
 }
 .modal-content {
-  background-color: #fff;
-  margin: 15% auto;
+  background-color: #fefefe;
+  margin: 10% auto;
   padding: 20px;
   border: 1px solid #888;
-  width: 80%;
   max-width: 400px;
   border-radius: 8px;
 }
 .close {
-  color: #aaa;
   float: right;
   font-size: 28px;
   cursor: pointer;
@@ -139,7 +140,7 @@ button {
 
 /* Responsive */
 @media (max-width: 600px) {
-  .chat-container, .form-container {
+  .chat-container, #page-auth > div {
     width: 95%;
     margin: 10px auto;
   }
